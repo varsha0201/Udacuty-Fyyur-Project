@@ -24,7 +24,7 @@ from sqlalchemy.orm import sessionmaker
 import logging
 from flask_script import Manager
 from sqlalchemy.orm.exc import NoResultFound
-#from logging import Formatter, FileHandler
+from logging import Formatter, FileHandler
 from flask_babel import Babel
 #from wtforms import StringField, BooleanField
 from wtforms.validators import DataRequired
@@ -36,13 +36,15 @@ from flask_wtf import FlaskForm
 from flask import abort
 from sqlalchemy.orm.exc import NoResultFound
 from forms import *
+from sqlalchemy.dialects.postgresql import ARRAY
 #from models import *
 from flask_sqlalchemy import SQLAlchemy
 #from config import Config, SECRET_KEY
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from sqlalchemy import create_engine
+import sys
+
 
 #----------------------------------------------------------------------------#
 # App Config.
@@ -59,21 +61,27 @@ db = SQLAlchemy(app)
 # babel = Babel(app)
 moment = Moment(app)
 db.init_app(app)
+
 class Venue(db.Model):
     __tablename__ = 'venues'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
-    genres = db.Column(db.String)
+    genres = db.Column(ARRAY(db.String(120)))
     city = db.Column(db.String(120))
     state = db.Column(db.String(120))
     address = db.Column(db.String(120))
     phone = db.Column(db.String(120))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
-    seeking_talent = db.Column(db.Boolean)
+    seeking_talent = db.Column(db.Boolean, default=False)
     seeking_description = db.Column(db.String(500))
     website = db.Column(db.String(120))
+    # relationships
+    # shows = db.relationship('Show', backref='venues', lazy=True)
+    #shows = Column(db.Integer, ForeignKey('venues.id'))
+    
+    
 
     def add(self):
         db.session.add(self)
@@ -172,12 +180,13 @@ class Artist(db.Model):
     state = db.Column(db.String(120))
     address = db.Column(db.String(120))
     phone = db.Column(db.String(120))
-    genres = db.Column(db.String(120))
+    genres = db.Column(ARRAY(db.String(120)))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
     website = db.Column(db.String(120))
-    seeking_venue = db.Column(db.Boolean)
+    seeking_venue = db.Column(db.Boolean, default=False)
     seeking_description = db.Column(db.String(500))
+    #shows = db.relationship('Show', backref='artists', lazy=True)
 
     def add(self):
         db.session.add(self)
@@ -196,6 +205,7 @@ class Artist(db.Model):
 
     @property
     def serialize_with_shows_details(self):
+        import datetime
         return {'id': self.id,
                 'name': self.name,
                 'city': self.city,
@@ -237,14 +247,13 @@ class Artist(db.Model):
 
 
 class Show(db.Model):
-    __tablename__ = 'shows'
+    __tablename__ = 'Show'
+
     id = db.Column(db.Integer, primary_key=True)
-    start_time = db.Column(db.DateTime())
-    venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'))
-  #to get the venue name, I can apparently write a select statement that selects it. I, however, don't
-  #think that is the best way to do it 
-  #select name from artist where id = artist_id
-    artist_id = db.Column(db.Integer, db.ForeignKey('Artist.id'))
+    start_time = db.Column(db.DateTime)
+    venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id', ondelete="CASCADE"))
+    artist_id = db.Column(db.Integer, db.ForeignKey('Artist.id', ondelete="CASCADE"))
+    
     def add(self):
         db.session.add(self)
         db.session.commit()
@@ -521,6 +530,7 @@ def delete_venue(venue_id):
 #  ----------------------------------------------------------------
 @app.route('/artists')
 def artists():
+    
     artists = Artist.query.all()
     data = [artist.serialize_with_shows_details for artist in artists]
     return render_template('pages/artists.html', artists=data)
